@@ -22,7 +22,7 @@ def uniform_cost_search(graph, start, goal):
             break
 
         #check neighboring cities
-        for neighbor, distance in graph.get(current_city, []):
+        for neighbor, distance in graph.get(current_city, {}).items():
             new_cost = current_cost + distance
 
             #found cheaper
@@ -48,18 +48,15 @@ def uniform_cost_search(graph, start, goal):
 
     return path, cost_so_far[goal]
 
-graph = {}
+def run_ucs(graph, start, goal):
 
-start = "Chicago"
-goal = "South Bend"
+    path, distance = uniform_cost_search(graph, start, goal)
 
-path, distance = uniform_cost_search(graph, start, goal)
-
-if path is None:
-    print("No route found.")
-else:
-    print("Route:", " -> ".join(path))
-    print("Total distance:", distance, "miles")
+    if path is None:
+        print("No route found.")
+    else:
+        print("UCS path:", " -> ".join(path))
+        print("Total distance:", distance, "miles")
 
 
 

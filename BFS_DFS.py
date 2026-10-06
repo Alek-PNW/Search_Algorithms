@@ -68,17 +68,7 @@ def distance(graph, path):
     return total
 
 
-if __name__ == "__main__":
-    graph = {
-        "Phoenix": {"Los Angeles": 372, "Las Vegas": 302},
-        "Los Angeles": {"Phoenix": 372, "Las Vegas": 281},
-        "Las Vegas": {"Phoenix": 302, "Los Angeles": 281}
-    }
-
-    start, target = generator(graph)
-
-    print("Start:", start)
-    print("Target:", target)
+def run_dfs_bfs(graph, start, target):
 
     dfs_path = dfs(graph, start, target)
     bfs_path = bfs(graph, start, target)
@@ -94,3 +84,7 @@ if __name__ == "__main__":
     else:
         print("BFS path:", " -> ".join(bfs_path))
         print("BFS distance:", distance(graph, bfs_path), "miles")
+
+
+def run_bfs_dfs(graph, start, target):
+    run_dfs_bfs(graph, start, target)

@@ -1,30 +1,23 @@
-import json
 import heapq
 
-def load_data(filename):
-    with open(filename, 'r') as f:
-        data = json.load(f)
-    return data['graph'], data['heuristics']
 
-def run_a_star(filename, start_city, target_city):
-    """
-    Main function called by your main program.
-    Accepts the filename parameter, loads data, and executes A* search algorithm.
-    """
-
-    graph, heuristics = load_data(filename)
-
+def run_a_star(graph, heuristics, start_city, target_city):
     if start_city == target_city:
-        return [start_city], 0
+        path, distance = [start_city], 0
+        print('A* path:', ' -> '.join(path))
+        print('A* total distance:', distance, 'miles')
+        return path, distance
 
-    pq = [(heuristics.get(start_city, 0), 0, start_city, [start_city])]
-    g_scores = {start_city:0}
+    pq = [(heuristics.get(start_city, {}).get(target_city, 0), 0, start_city, [start_city])]
+    g_scores = {start_city: 0}
     closed_set = set()
 
     while pq:
-        f, g, current, path = heapq.heappop(pq)
+        _, g, current, path = heapq.heappop(pq)
 
         if current == target_city:
+            print('A* path:', ' -> '.join(path))
+            print('A* total distance:', g, 'miles')
             return path, g
 
         if current in closed_set:
@@ -39,7 +32,11 @@ def run_a_star(filename, start_city, target_city):
 
             if tentative_g < g_scores.get(neighbor, float('inf')):
                 g_scores[neighbor] = tentative_g
-                f = tentative_g + heuristics.get(neighbor, 0)
-                heapq.heappush(pq, (f, tentative_g, neighbor, path + [neighbor]))
+                heuristic = heuristics.get(neighbor, {}).get(target_city, 0)
+                heapq.heappush(
+                    pq,
+                    (tentative_g + heuristic, tentative_g, neighbor, path + [neighbor]),
+                )
 
+    print('A*: No route found.')
     return None, float('inf')
