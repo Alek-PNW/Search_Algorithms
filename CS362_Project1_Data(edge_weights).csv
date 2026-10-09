@@ -1,0 +1,19 @@
+City,Phoenix,Los Angeles,Denver,Boise,Wichita,Bozeman,Omaha,Las Vegas,Albuquerque,Fargo,Oklahoma City,Portland,Sioux Falls,Dallas,Salt Lake City,Seattle,Jackson
+Phoenix,,372,864,,,,,302,418,,,,,,,,
+Los Angeles,372,,,,,,,281,,,,963,,,,,
+Denver,864,,,,518,,539,,447,,677,,,,519,,513
+Boise,,,,,,476,,624,,,,430,,,339,494,369
+Wichita,,,518,,,,302,,,,162,,,,,,
+Bozeman,,,,476,,,,,,749,,,801,,,,216
+Omaha,,,539,,302,,,,,,,,181,,,,928
+Las Vegas,302,281,,624,,,,,,,,971,,,421,,
+Albuquerque,418,,447,,,,,,,,543,,,649,,,
+Fargo,,,,,,749,,,,,,,243,,,,
+Oklahoma City,,,677,,162,,,,543,,,,,206,,,
+Portland,,963,,430,,,,971,,,,,,,,174,
+Sioux Falls,,,,,,801,181,,,243,,,,,,,885
+Dallas,,,,,,,,,649,,206,,,,,,
+Salt Lake City,,,519,339,,,,421,,,,,,,,,280
+Seattle,,,,494,,,,,,,,174,,,,,
+Jackson,,,513,369,,216,928,,,,,,885,,280,,
+,,,,,,,,,,,,,,,,,

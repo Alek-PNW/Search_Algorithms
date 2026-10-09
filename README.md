@@ -23,13 +23,19 @@ Overview of search algorithms, BFS, DFS, UCS, A\* Search, by using 4 different m
 - Windows  
   Open command terminal and run
   ```
-    python search_algorithms.py
+    python main.py
   ```
 - Linux / Mac  
   Open command terminal and run
   ```
-    python3 search_algorithms.py
+    python3 main.py
   ```
+
+### Legacy combined runner
+
+To run the original search algorithms as a single standalone script, run
+`python legacy/main.py`. It loads the graph and heuristic data from the CSV files.
+The original legacy modules remain available in the `legacy` directory.
 
 ## Authors
 
