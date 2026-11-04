@@ -36,7 +36,7 @@ def load_data():
 
     try:
         #checking for file not found error, if file is not found, return None for all three variables
-        with open("CS362_Project1_Data(edge_weights).csv", encoding="utf-8") as file:
+        with open("CS362_Project_Data(edge_weights).csv", encoding="utf-8") as file:
             # open the CSV file and read its contents
 
             reader = csv.reader(file)
@@ -71,7 +71,7 @@ def load_data():
 
     try:
         #checking for file not found error, if file is not found, return None for all three variables
-        with open("CS362_Project1_Data(heuristics).csv", encoding="utf-8") as file:
+        with open("CS362_Project_Data(heuristics).csv", encoding="utf-8") as file:
             # open the CSV file and read its contents
 
             reader = csv.reader(file)
