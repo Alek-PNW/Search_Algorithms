@@ -606,6 +606,7 @@ def chase_results(graph, depth, method, ordering, compare=False):
 
 class Graphics:
     def __init__(self, root):
+        # Keep the graph, coloring, and replay data used by the interface
         self.graph = load_graph()
         self.colors = None
         self.replays = []
@@ -613,6 +614,7 @@ class Graphics:
         root.title("Highway map — Settings and Statistics")
         root.geometry("1200x850")
 
+        # These Tk variables hold the options selected for each search
         settings = ttk.LabelFrame(root, text="Settings", padding=8)
         settings.pack(fill="x")
         self.color_count = tk.StringVar(value="3")
@@ -637,6 +639,8 @@ class Graphics:
                         variable=self.heuristics).grid(row=2, column=0)
         ttk.Checkbutton(settings, text="Move ordering",
                         variable=self.ordering).grid(row=2, column=1)
+        
+        # connect each button to the matching run or comparison mode
         buttons = [
             ("Run coloring", self.run_coloring),
             ("Compare coloring", self.compare_coloring),
@@ -647,6 +651,7 @@ class Graphics:
             ttk.Button(settings, text=label, command=action).grid(
                 row=3, column=column, pady=6)
 
+        # Replay controls select a chase and step through its saved states
         controls = ttk.Frame(root)
         controls.pack(fill="x")
         self.picker = ttk.Combobox(controls, state="readonly", width=45)
@@ -655,6 +660,8 @@ class Graphics:
         ttk.Button(controls, text="Previous",
                    command=self.previous).pack(side="left")
         ttk.Button(controls, text="Next", command=self.next).pack(side="left")
+
+        # The canvas shows the map and replay; the text area lists results.
         self.canvas = tk.Canvas(root, background="white", height=420)
         self.canvas.pack(fill="both", expand=True)
         self.canvas.bind("<Configure>", self.resize)
@@ -666,6 +673,7 @@ class Graphics:
                              font=("Courier", 10))
         self.stats.pack(fill="x")
 
+    # Button callbacks choose a search type and whether to compare versions
     def run_coloring(self):
         self.run("coloring", False)
 
@@ -679,6 +687,7 @@ class Graphics:
         self.run("chase", True)
 
     def run(self, kind, compare):
+        # Run the requested algorithm and update the results shown in the UI
         try:
             if kind == "coloring":
                 mode = None
@@ -699,6 +708,7 @@ class Graphics:
                     "Coloring finished." if self.colors is not None
                     else "No coloring found.")
             else:
+                # save chase replays and select the first one for display.
                 rows, self.replays = chase_results(
                     self.graph, int(self.depth.get()), self.method.get(),
                     self.ordering.get(), compare)
@@ -712,6 +722,7 @@ class Graphics:
                 note = (
                     "Branches pruned = immediate moves skipped. Ordering "
                     "saves = unordered minus ordered nodes.")
+            # Replace the previous report with the new run's results
             self.stats.delete("1.0", "end")
             self.stats.insert("end", headings + "\n" + note + "\n\n")
             for row in rows:
@@ -722,15 +733,18 @@ class Graphics:
             messagebox.showerror("Could not run", str(error))
 
     def select_chase(self, event):
+        # Start a selected replay at its initial state.
         self.turn = 0
         self.draw()
 
     def previous(self):
+        # Move backward only when an earlier state exists
         if self.turn > 0:
             self.turn -= 1
             self.draw()
 
     def next(self):
+        # Move forward only when a later state exists in the replay
         if self.replays:
             history = self.replays[self.picker.current()][1]
             if self.turn < len(history) - 1:
@@ -738,18 +752,22 @@ class Graphics:
                 self.draw()
 
     def resize(self, event):
+        # Redraw the map so city positions match the canvas size
         self.draw()
 
     def draw(self):
+        # Rebuild the canvas from the current coloring and replay state
         self.canvas.delete("all")
         width = max(self.canvas.winfo_width(), 700)
         height = max(self.canvas.winfo_height(), 300)
         positions = []
         for city in range(self.graph.n):
+            # Place cities around a circle to keep the whole graph visible
             angle = 2 * math.pi * city / self.graph.n
             x = width / 2 + (width / 2 - 120) * math.cos(angle)
             y = height / 2 + (height / 2 - 55) * math.sin(angle)
             positions.append((x, y))
+        # Draw each undirected highway once
         for city in range(self.graph.n):
             for neighbor in self.graph.neighbors(city):
                 if city < neighbor:
@@ -758,6 +776,7 @@ class Graphics:
                     self.canvas.create_line(
                         x1, y1, x2, y2, fill="#bbc3cd")
         if self.replays:
+            # Draw the paths each player has taken up to the selected turn
             _, history, winner = self.replays[self.picker.current()]
             for player, color in ((0, "blue"), (1, "#c45100")):
                 for step in range(1, self.turn + 1):
@@ -765,6 +784,7 @@ class Graphics:
                     x2, y2 = positions[history[step][player]]
                     self.canvas.create_line(
                         x1, y1, x2, y2, fill=color, width=3, arrow="last")
+        # Color the city markers when a coloring solution is available.
         for city, (x, y) in enumerate(positions):
             color = "#ddd"
             if self.colors is not None:
@@ -772,6 +792,7 @@ class Graphics:
             self.canvas.create_oval(x-10, y-10, x+10, y+10, fill=color)
             self.canvas.create_text(x, y-23, text=self.graph.cities[city])
         if self.replays:
+            # Mark current player locations and report whether the chase ended
             police, thief, _, _ = history[self.turn]
             x, y = positions[police]
             self.canvas.create_rectangle(

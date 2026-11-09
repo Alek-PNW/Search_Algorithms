@@ -1,0 +1,314 @@
+PROJECT 2: PROGRAM WALKTHROUGH
+
+This file is a guide to the structure, data, and execution of project2.py. It
+is intended to help explain the program during a presentation or code defense.
+
+
+- Overall purpose and imports
+
+  In depth:
+  The program uses a graph of 17 western U.S. cities to demonstrate two search
+  problems. The first is a constraint-satisfaction problem (CSP): assign a
+  color to every city so that directly connected cities have different
+  colors. The second is an adversarial search problem: simulate a police
+  player trying to catch a thief. Both problems use the same graph and CSV
+  data.
+
+  The imports support the program's main tasks: csv reads the input files,
+  math positions cities in the drawing, random selects repeatable chase
+  starts, time measures search runtime, pathlib locates CSVs beside the
+  script, and tkinter builds the graphical interface.
+
+
+- City and color constants
+
+  In depth:
+  CITIES is the ordered list of city names. The index of a city in this list
+  is also its integer identifier throughout the graph, assignments, domains,
+  and chase state. For example, a matrix row and column refer to city indices
+  rather than city-name strings.
+
+  COLORS maps color indices to display names. The CSP uses integer color
+  indices internally; the names are used when printing or drawing a coloring.
+  The solver can be initialized with fewer colors than are listed.
+
+
+- CSV parsing: read_csv_matrix
+
+  In depth:
+  read_csv_matrix opens a CSV whose first row and first column contain city
+  names. It skips the top-left cell, reads each non-empty value, converts it
+  to a float, and returns (source city, destination city, value) tuples.
+  Empty cells represent missing data. This common helper is used for both
+  highway distances and the heuristic-distance table.
+
+
+- Graph data structure
+
+  In depth:
+  Graph stores the city list, the number of cities, and two square matrices:
+
+  * g[i][j] stores a direct highway distance, or None if there is no direct
+    highway between cities i and j.
+  * h[i][j] stores a distance estimate between every city pair. The chase
+    search uses this matrix to evaluate positions and order some moves.
+
+  add_edge and set_heuristic write values in both directions because the
+  roads and distance estimates are treated as undirected. load_edges and
+  load_heuristics read CSV tuples, convert city names to indices, and fill
+  their respective matrices. load_edges skips diagonal entries and avoids
+  adding a road twice when the CSV contains mirrored values. neighbors(v)
+  returns the indices of cities connected directly to city v; this supports
+  both CSP constraints and legal chase moves.
+
+
+- ColoringCSP: state and basic checks
+
+  In depth:
+  ColoringCSP receives a Graph and a number of colors. It initializes:
+
+  * assignment[v]: the chosen color index for city v, or None if it is
+    unassigned.
+  * domains[v]: the color indices still available to city v.
+  * assignments_made and backtracks: counters for search activity.
+
+  is_consistent checks whether a proposed color matches an already-colored
+  neighbor. legal_values returns the colors in that city's domain that pass
+  this check. unassigned_cities lists cities without a color. The final
+  is_valid_coloring check confirms every city was assigned and every
+  connected pair has different colors. This final check is used to validate
+  returned solutions; search also checks consistency as it assigns cities.
+
+
+- ColoringCSP: heuristics and inference
+
+  In depth:
+  select_variable chooses the next city. Without heuristics it takes the
+  first unassigned city in CITIES order. With heuristics it uses MRV
+  (minimum remaining values): choose the city with the fewest legal colors.
+  If there is a tie, it prefers the city with more unassigned neighbors.
+
+  order_values chooses which colors to try. Without heuristics it uses the
+  order in the domain. With heuristics it applies LCV (least constraining
+  value): try first the color that would eliminate options from the fewest
+  unassigned neighbors.
+
+  forward_check removes a selected color from each unassigned direct
+  neighbor's domain. If a neighbor's domain becomes empty, it reports failure
+  immediately. revise is an AC-3 helper: it removes a color from one city's
+  domain if the adjacent city's domain has no different color to support it.
+  all_arcs creates directed (city, neighbor) pairs. ac3 processes those pairs
+  in a queue; when a domain shrinks, it schedules related pairs for another
+  check. It fails if a domain becomes empty.
+
+
+- ColoringCSP: recursive backtracking and solve
+
+  In depth:
+  backtrack returns success when all cities are assigned. Otherwise it selects
+  a city and tries each legal color. Before each attempt it copies the domains
+  so that any pruning from a failed attempt can be undone. It records the
+  assignment and increments assignments_made.
+
+  The inference argument controls extra work after an assignment:
+
+  * None: check conflicts with already-colored neighbors only.
+  * "fc": run forward checking against unassigned direct neighbors.
+  * "ac3": restrict the selected city's domain to its chosen color, then run
+    AC-3 starting from its unassigned neighbors.
+
+  If inference or the recursive search reports failure, the city is
+  unassigned, the saved domains are restored, and backtracks is incremented.
+  The solver then tries another color. Backtracking is still possible with
+  forward checking or AC-3; those methods can expose some dead ends earlier
+  but do not guarantee that every later choice will work.
+
+  solve resets the assignment, domains, and counters so each run starts fresh.
+  AC-3 additionally checks all graph arcs before recursive search begins. It
+  measures elapsed time and returns (success, runtime).
+
+
+- Minimum colors and command-line comparison helpers
+
+  In depth:
+  find_min_colors tries color counts from one up to the number of names in
+  COLORS. For each count it creates a fresh ColoringCSP, solves it, and prints
+  whether it succeeded and its assignment, backtrack, and runtime statistics.
+  On success it validates the coloring and returns the color count and a copy
+  of the assignment.
+
+  run_part_a first finds the minimum color count. It then compares four
+  configurations using fresh solvers: plain backtracking, heuristics, heuristic
+  plus forward checking, and heuristic plus AC-3. It prints search statistics
+  and validates each result. Finally, it prints the city-to-color mapping from
+  the last solver, which is the heuristics-plus-AC-3 run.
+
+
+- MeasuredCSP and coloring_results
+
+  In depth:
+  MeasuredCSP extends ColoringCSP to count removed domain values in
+  values_pruned. It measures the change in all domain sizes during forward
+  checking and the change in one domain during revise, which is used by AC-3.
+  Its solve method resets this extra counter before calling the parent solver.
+
+  coloring_results is the function used by the graphical interface. It runs
+  either the selected settings or all four comparison configurations. For
+  each run it creates a new MeasuredCSP, validates a successful solution, and
+  builds a row of display data containing the method, color count, success,
+  assignments, backtracks, pruned values, and runtime. It returns these rows
+  and a copy of the most recently found coloring.
+
+
+- ChaseGame: game rules and state
+
+  In depth:
+  ChaseGame stores the graph, a move limit, and counters for expanded search
+  nodes and pruned branches. Its win_score is set greater than the largest
+  value in the heuristic-distance matrix, so a win or loss outweighs any
+  non-terminal distance estimate.
+
+  A game state is a tuple:
+  (police city, thief city, turns taken, whether caught).
+  Police moves first. On an even turn count, move updates the police city;
+  otherwise it updates the thief city. Police captures the thief by moving
+  into the thief's city. A player may move to any directly connected neighbor
+  or stay in the current city.
+
+  winner checks whether the thief was caught or the move limit was reached.
+  Capture means Police wins; reaching the limit means Thief wins. If neither
+  condition applies, the game continues.
+
+
+- ChaseGame: minimax, alpha-beta, and move ordering
+
+  In depth:
+  search recursively explores possible future moves up to the requested
+  depth. It checks for a finished game first. At depth zero, it evaluates the
+  position as the negative heuristic distance between police and thief:
+  smaller separation gives Police a higher score. Police is the maximizing
+  player and the thief is the minimizing player, so each chooses the move
+  best for its own goal.
+
+  With alpha-beta enabled, alpha records the best score the maximizing side
+  can already guarantee, and beta records the best score the minimizing side
+  can already guarantee. When alpha is at least beta, the remaining moves in
+  that branch cannot change the choice, so search skips them. This pruning
+  preserves minimax's decision while often exploring fewer nodes.
+
+  With move ordering enabled, deeper search nodes sort candidate moves by the
+  heuristic distance from the destination to the opponent, trying closer
+  positions first. The root node keeps the original move order, so the
+  actual decision uses a consistent tie-breaking order across versions.
+  search returns a score and the best destination.
+
+  play resets the counters, creates the initial state, and repeatedly asks
+  search to choose one move. It applies only that move, stores the new state
+  in history, then searches again from the updated game. Thus depth is the
+  number of simulated individual moves in each lookahead, not the number of
+  real moves executed at once. play returns the state history, winner, expanded
+  node count, and elapsed time.
+
+
+- Console chase comparison: run_part_b
+
+  In depth:
+  run_part_b compares minimax, alpha-beta, and alpha-beta with move ordering.
+  It samples five different starting city pairs using a fixed random seed,
+  which makes the selected starts reproducible. It tests depths 2, 4, and 6
+  for each pair and prints the winner, nodes expanded, and runtime.
+
+  For each start and depth, it checks that the three methods chose identical
+  replay paths and raises an error if they did not. It reports the node
+  difference between unordered and ordered alpha-beta. It saves the minimax
+  replay at depth 6 for later use.
+
+
+- chase_results
+
+  In depth:
+  chase_results performs the chase runs requested by the GUI. It uses the
+  same fixed seed and five starting pairs as the console comparison. In
+  selected-settings mode it runs the chosen method and depth. In comparison
+  mode it runs all three methods at depths 2, 4, and 6.
+
+  It gathers display rows containing the chase number, depth, method, whether
+  ordering was used, winner, node count, pruned branches, runtime, and (where
+  applicable) ordering's node savings. It also collects each replay with a
+  label and winner. In comparison mode it checks that the selected paths
+  match across methods.
+
+
+- Loading the graph: load_graph
+
+  In depth:
+  load_graph determines the directory containing project2.py, constructs a
+  Graph with CITIES, then loads the highway edge-weight CSV and heuristic
+  distance CSV from that same directory. Resolving paths relative to the
+  script means the GUI can find the data files regardless of the current
+  working directory, provided the files remain beside the script.
+
+
+- Graphics: interface state and controls
+
+  In depth:
+  Graphics builds the Tkinter user interface. It loads the graph and keeps
+  three pieces of display state: colors for the map, saved chase replays, and
+  the currently selected replay turn.
+
+  The settings area contains controls for color count, inference method, chase
+  depth, chase method, heuristic use, and move ordering. Button callbacks call
+  the shared run method with either coloring or chase mode and a flag for
+  whether to compare algorithms. The replay selector chooses a saved chase;
+  Previous and Next step through its states. The canvas displays the graph,
+  and the text widget displays result rows and column headings.
+
+
+- Graphics: running searches and updating statistics
+
+  In depth:
+  The run method translates the selected inference label into the solver's
+  internal values None, "fc", or "ac3". For coloring, it calls
+  coloring_results, saves the returned coloring, and sets a status message.
+  For chase, it calls chase_results, stores the replays, fills the replay
+  selector, and resets the selected turn to the initial state.
+
+  The method then replaces the old statistics text with headings, an
+  explanation of the reported measurements, and the new rows. Finally it
+  redraws the canvas. If the operation raises an exception, the interface
+  displays its message in a Tkinter error dialog. The replay callbacks reset,
+  decrement, or increment the selected turn within the available history and
+  redraw the display.
+
+
+- Graphics: drawing and replay display
+
+  In depth:
+  draw clears the canvas and calculates a display coordinate for each city by
+  placing the cities around a circle. These are visualization coordinates,
+  not geographic coordinates. It draws each undirected highway once by
+  drawing only when the neighbor's index is greater than the current city's
+  index.
+
+  If a chase replay is selected, draw renders the paths taken by police and
+  thief up to the selected turn, then draws the current player markers: a blue
+  square for police and an orange triangle for thief. City circles use the
+  solution color if one is available, or gray otherwise. The status text
+  indicates the selected turn and whether the replay is still in progress or
+  finished. Resizing the canvas calls draw again so the visualization adapts
+  to the new size.
+
+
+- Program entry points and execution
+
+  In depth:
+  main() is a console-oriented entry point: it constructs and loads the graph,
+  then calls run_part_a and run_part_b to print the algorithm comparisons.
+
+  At the bottom of the file, the __main__ guard instead creates the Tk root,
+  constructs Graphics, and starts Tkinter's event loop with mainloop(). This
+  is the behavior when project2.py is run directly. In the current source,
+  main() is defined but is not called by that guard. Therefore, the direct
+  launch opens the GUI; the console comparisons in main() run only if main()
+  is called explicitly. File-loading errors raised during GUI startup are
+  shown in an error dialog before the window is destroyed.
