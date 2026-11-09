@@ -1,7 +1,15 @@
 import csv
-import time #use for time tracking later
+import math
+import random
+import time 
+from pathlib import Path
+import tkinter as tk
+from tkinter import messagebox, ttk
 """
-PROJECT DESCRIPTION
+This program uses a highway map of western U.S. cities to demonstrate constraint-satisfaction and adversarial search.
+It colors the map by comparing backtracking strategies with heuristics, forward checking, and AC-3, then simulates a police-and-thief chase using minimax, alpha-beta pruning, and move ordering.
+The graph's highway connections and straight-line distances are loaded from CSV files.
+A Tkinter interface lets users select algorithm settings, compare results, and step through saved chase replays.
 """
 """
 Authors: Alek R.
@@ -280,6 +288,7 @@ class ChaseGame:
         self.graph = graph
         self.max_moves = max_moves
         self.nodes_expanded = 0
+        self.branches_pruned = 0
 
         # A win or loss must matter more than any straight-line distance.
         self.win_score = 1 + max(max(row) for row in graph.h)
@@ -337,7 +346,7 @@ class ChaseGame:
             moves.sort(key=lambda city: self.graph.h[city][opponent])
 
         best_move = None
-        for destination in moves:
+        for move_index, destination in enumerate(moves):
             # Imagine the move, then let the other player respond.
             next_state = self.move(state, destination)
             score, _ = self.search(
@@ -362,12 +371,14 @@ class ChaseGame:
             # already hold the score to. If they meet or cross, the rest
             # of this branch cannot improve the earlier player's choice.
             if use_pruning and alpha >= beta:
+                self.branches_pruned += len(moves) - move_index - 1
                 break
 
         return best_score, best_move
 
     def play(self, police, thief, depth, use_pruning=False, order_moves=False):
         self.nodes_expanded = 0
+        self.branches_pruned = 0
         # State: (police city, thief city, turns taken, whether caught).
         state = (police, thief, 0, False)
         history = [state]
@@ -496,10 +507,298 @@ def run_part_a(graph):
     print()
 
 
+class MeasuredCSP(ColoringCSP):
+    """Use the team's algorithms and count the colors they remove."""
+
+    def __init__(self, graph, num_colors):
+        super().__init__(graph, num_colors)
+        self.values_pruned = 0
+
+    def forward_check(self, city, color):
+        before = sum(len(domain) for domain in self.domains)
+        valid = super().forward_check(city, color)
+        after = sum(len(domain) for domain in self.domains)
+        self.values_pruned += before - after
+        return valid
+
+    def revise(self, source, neighbor):
+        before = len(self.domains[source])
+        changed = super().revise(source, neighbor)
+        self.values_pruned += before - len(self.domains[source])
+        return changed
+
+    def solve(self, use_heuristics=False, inference=None):
+        self.values_pruned = 0
+        return super().solve(use_heuristics, inference)
+
+
+def load_graph():
+    folder = Path(__file__).resolve().parent
+    graph = Graph(CITIES)
+    graph.load_edges(folder / "CS362_Project_Data(edge_weights).csv")
+    graph.load_heuristics(folder / "CS362_Project_Data(heuristics).csv")
+    return graph
+
+
+def coloring_results(graph, colors, heuristics, inference, compare=False):
+    versions = [("Selected settings", heuristics, inference)]
+    if compare:
+        versions = [
+            ("Plain backtracking", False, None),
+            ("Heuristics", True, None),
+            ("Heuristics + FC", True, "fc"),
+            ("Heuristics + AC-3", True, "ac3"),
+        ]
+    rows = []
+    coloring = None
+    for name, use_heuristics, mode in versions:
+        solver = MeasuredCSP(graph, colors)
+        solved, seconds = solver.solve(use_heuristics, mode)
+        if solved and not solver.is_valid_coloring():
+            raise RuntimeError("Invalid coloring returned.")
+        rows.append((name, colors, "Yes" if solved else "No",
+                     solver.assignments_made, solver.backtracks,
+                     solver.values_pruned, f"{seconds:.6f}"))
+        if solved:
+            coloring = solver.assignment.copy()
+    return rows, coloring
+
+
+def chase_results(graph, depth, method, ordering, compare=False):
+    pairs = [(police, thief) for police in range(graph.n)
+             for thief in range(graph.n) if police != thief]
+    starts = random.Random(362).sample(pairs, 5)
+    versions = [(method, method == "Alpha-beta", ordering)]
+    depths = [depth]
+    if compare:
+        versions = [("Minimax", False, False),
+                    ("Alpha-beta", True, False),
+                    ("Alpha-beta + ordering", True, True)]
+        depths = [2, 4, 6]
+    rows, replays = [], []
+    for chase, (police, thief) in enumerate(starts, 1):
+        for limit in depths:
+            results = []
+            base_nodes = None
+            for name, pruning, ordered in versions:
+                game = ChaseGame(graph)
+                history, winner, nodes, seconds = game.play(
+                    police, thief, limit, pruning, ordered)
+                savings = ""
+                if compare and name == "Alpha-beta":
+                    base_nodes = nodes
+                if compare and name == "Alpha-beta + ordering":
+                    savings = base_nodes - nodes
+                rows.append((chase, limit, name, "Yes" if ordered else "No",
+                             winner, nodes, game.branches_pruned,
+                             f"{seconds:.6f}", savings))
+                results.append(history)
+                label = f"{chase} | depth {limit} | {name}"
+                replays.append((label, history, winner))
+            if compare:
+                minimax_path = results[0]
+                for path in results[1:]:
+                    if path != minimax_path:
+                        raise RuntimeError(
+                            "Minimax and alpha-beta chose different moves.")
+    return rows, replays
+
+
+class Graphics:
+    def __init__(self, root):
+        self.graph = load_graph()
+        self.colors = None
+        self.replays = []
+        self.turn = 0
+        root.title("Highway map — Settings and Statistics")
+        root.geometry("1200x850")
+
+        settings = ttk.LabelFrame(root, text="Settings", padding=8)
+        settings.pack(fill="x")
+        self.color_count = tk.StringVar(value="3")
+        self.inference = tk.StringVar(value="AC-3")
+        self.depth = tk.StringVar(value="4")
+        self.method = tk.StringVar(value="Alpha-beta")
+        self.heuristics = tk.BooleanVar(value=True)
+        self.ordering = tk.BooleanVar(value=True)
+        choices = [
+            ("Colors", self.color_count, (1, 2, 3, 4)),
+            ("Inference", self.inference,
+             ("None", "Forward checking", "AC-3")),
+            ("Depth", self.depth, (2, 4, 6)),
+            ("Method", self.method, ("Minimax", "Alpha-beta")),
+        ]
+        for column, (label, variable, values) in enumerate(choices):
+            ttk.Label(settings, text=label).grid(row=0, column=column)
+            ttk.Combobox(settings, textvariable=variable, values=values,
+                         state="readonly", width=18).grid(
+                             row=1, column=column, padx=6)
+        ttk.Checkbutton(settings, text="Use heuristics",
+                        variable=self.heuristics).grid(row=2, column=0)
+        ttk.Checkbutton(settings, text="Move ordering",
+                        variable=self.ordering).grid(row=2, column=1)
+        buttons = [
+            ("Run coloring", self.run_coloring),
+            ("Compare coloring", self.compare_coloring),
+            ("Run 5 chases", self.run_chases),
+            ("Compare all depths", self.compare_chases),
+        ]
+        for column, (label, action) in enumerate(buttons):
+            ttk.Button(settings, text=label, command=action).grid(
+                row=3, column=column, pady=6)
+
+        controls = ttk.Frame(root)
+        controls.pack(fill="x")
+        self.picker = ttk.Combobox(controls, state="readonly", width=45)
+        self.picker.pack(side="left")
+        self.picker.bind("<<ComboboxSelected>>", self.select_chase)
+        ttk.Button(controls, text="Previous",
+                   command=self.previous).pack(side="left")
+        ttk.Button(controls, text="Next", command=self.next).pack(side="left")
+        self.canvas = tk.Canvas(root, background="white", height=420)
+        self.canvas.pack(fill="both", expand=True)
+        self.canvas.bind("<Configure>", self.resize)
+        self.status = tk.StringVar(
+            value="Blue square = Police. Orange triangle = Thief.")
+        ttk.Label(root, textvariable=self.status).pack()
+        ttk.Label(root, text="Statistics — scroll below to see all results").pack()
+        self.stats = tk.Text(root, height=10, wrap="none",
+                             font=("Courier", 10))
+        self.stats.pack(fill="x")
+
+    def run_coloring(self):
+        self.run("coloring", False)
+
+    def compare_coloring(self):
+        self.run("coloring", True)
+
+    def run_chases(self):
+        self.run("chase", False)
+
+    def compare_chases(self):
+        self.run("chase", True)
+
+    def run(self, kind, compare):
+        try:
+            if kind == "coloring":
+                mode = None
+                if self.inference.get() == "Forward checking":
+                    mode = "fc"
+                elif self.inference.get() == "AC-3":
+                    mode = "ac3"
+                rows, self.colors = coloring_results(
+                    self.graph, int(self.color_count.get()),
+                    self.heuristics.get(), mode, compare)
+                headings = (
+                    "Version | Colors | Solved | Assignments | Backtracks | "
+                    "Colors pruned | Seconds")
+                note = (
+                    "Colors pruned counts FC / AC-3 removals, including "
+                    "failed attempts.")
+                self.status.set(
+                    "Coloring finished." if self.colors is not None
+                    else "No coloring found.")
+            else:
+                rows, self.replays = chase_results(
+                    self.graph, int(self.depth.get()), self.method.get(),
+                    self.ordering.get(), compare)
+                labels = [label for label, _, _ in self.replays]
+                self.picker["values"] = labels
+                self.picker.current(0)
+                self.turn = 0
+                headings = (
+                    "Chase | Depth | Method | Ordering | Winner | Nodes | "
+                    "Branches pruned | Seconds | Ordering saves")
+                note = (
+                    "Branches pruned = immediate moves skipped. Ordering "
+                    "saves = unordered minus ordered nodes.")
+            self.stats.delete("1.0", "end")
+            self.stats.insert("end", headings + "\n" + note + "\n\n")
+            for row in rows:
+                self.stats.insert("end", " | ".join(
+                    str(value) for value in row) + "\n")
+            self.draw()
+        except Exception as error:
+            messagebox.showerror("Could not run", str(error))
+
+    def select_chase(self, event):
+        self.turn = 0
+        self.draw()
+
+    def previous(self):
+        if self.turn > 0:
+            self.turn -= 1
+            self.draw()
+
+    def next(self):
+        if self.replays:
+            history = self.replays[self.picker.current()][1]
+            if self.turn < len(history) - 1:
+                self.turn += 1
+                self.draw()
+
+    def resize(self, event):
+        self.draw()
+
+    def draw(self):
+        self.canvas.delete("all")
+        width = max(self.canvas.winfo_width(), 700)
+        height = max(self.canvas.winfo_height(), 300)
+        positions = []
+        for city in range(self.graph.n):
+            angle = 2 * math.pi * city / self.graph.n
+            x = width / 2 + (width / 2 - 120) * math.cos(angle)
+            y = height / 2 + (height / 2 - 55) * math.sin(angle)
+            positions.append((x, y))
+        for city in range(self.graph.n):
+            for neighbor in self.graph.neighbors(city):
+                if city < neighbor:
+                    x1, y1 = positions[city]
+                    x2, y2 = positions[neighbor]
+                    self.canvas.create_line(
+                        x1, y1, x2, y2, fill="#bbc3cd")
+        if self.replays:
+            _, history, winner = self.replays[self.picker.current()]
+            for player, color in ((0, "blue"), (1, "#c45100")):
+                for step in range(1, self.turn + 1):
+                    x1, y1 = positions[history[step - 1][player]]
+                    x2, y2 = positions[history[step][player]]
+                    self.canvas.create_line(
+                        x1, y1, x2, y2, fill=color, width=3, arrow="last")
+        for city, (x, y) in enumerate(positions):
+            color = "#ddd"
+            if self.colors is not None:
+                color = COLORS[self.colors[city]]
+            self.canvas.create_oval(x-10, y-10, x+10, y+10, fill=color)
+            self.canvas.create_text(x, y-23, text=self.graph.cities[city])
+        if self.replays:
+            police, thief, _, _ = history[self.turn]
+            x, y = positions[police]
+            self.canvas.create_rectangle(
+                x-22, y+10, x-6, y+26, fill="blue")
+            x, y = positions[thief]
+            self.canvas.create_polygon(
+                x+15, y+8, x+4, y+28, x+26, y+28, fill="#c45100")
+            result = "In progress"
+            if self.turn == len(history) - 1:
+                result = winner + " wins"
+            self.status.set(
+                f"Turn {self.turn}/{len(history)-1} | {result} | "
+                "Blue square = Police. Orange triangle = Thief.")
+
+
 def main():
     graph = Graph(CITIES)
     graph.load_edges("CS362_Project_Data(edge_weights).csv")
     graph.load_heuristics("CS362_Project_Data(heuristics).csv")
     run_part_a(graph)
+    run_part_b(graph)
+
 if __name__ == "__main__":
-    main()
+    root = tk.Tk()
+    try:
+        Graphics(root)
+        root.mainloop()
+    except (OSError, ValueError) as error:
+        messagebox.showerror("Could not load CSVs", str(error))
+        root.destroy()
