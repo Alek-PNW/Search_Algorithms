@@ -41,6 +41,22 @@ Project 2 opens a Tkinter window. It lets you configure and compare map
 coloring methods (backtracking, heuristics, forward checking, and AC-3), run
 police/thief chase searches (minimax and alpha-beta), and view chase replays.
 
+Implemented Algorithms
+
+Part A: Constraint Satisfaction(Map Coloring)
+- Backtracking Search
+- Minimum Remaining Values(MRV)
+- Degree Heuristic
+- Least Constraining Value(LCV)
+- Forward Checking
+- AC-3(Arc Consistency)
+
+Part B: Adversarial Search(Police vs. Thief)
+- Minimax Search
+- Alpha-Beta Pruning
+- Move Ordering
+- Depth-Limited Search
+
 Windows:
 
 ```cmd
