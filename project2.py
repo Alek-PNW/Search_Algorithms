@@ -290,8 +290,11 @@ class ChaseGame:
         self.nodes_expanded = 0
         self.branches_pruned = 0
 
-        # A win or loss must matter more than any straight-line distance.
-        self.win_score = 1 + max(max(row) for row in graph.h)
+        # Keep terminal outcomes beyond heuristic scores, while accounting
+        # for how quickly either player wins.
+        self.win_score = (
+            1 + max(max(row) for row in graph.h) + max_moves
+        )
 
     def winner(self, state):
         _, _, turns, caught = state
@@ -306,11 +309,11 @@ class ChaseGame:
 
         # Police starts, so even turn counts mean Police moves next.
         if turns % 2 == 0:
-            # Capture happens when Police moves into the Thief's city.
-            caught = destination != police and destination == thief
+            caught = destination == thief
             return destination, thief, turns + 1, caught
 
-        return police, destination, turns + 1, False
+        caught = destination == police
+        return police, destination, turns + 1, caught
 
     def search(self, state, depth, use_pruning=False, order_moves=False,
                alpha=float("-inf"), beta=float("inf"), is_root=True):
@@ -320,9 +323,9 @@ class ChaseGame:
         # Check the real game result before estimating a score.
         winner = self.winner(state)
         if winner == "Police":
-            return self.win_score, None
+            return self.win_score - turns, None
         if winner == "Thief":
-            return -self.win_score, None
+            return -self.win_score + turns, None
         if depth == 0:
             # Closer is better for Police: -5 is higher than -20.
             return -self.graph.h[police][thief], None
