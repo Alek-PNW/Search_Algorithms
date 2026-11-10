@@ -71,6 +71,20 @@ class Graph:
         self.h[u][v] = value
         self.h[v][u] = value
 
+    def print_graph_stats(self):
+        edge_count = 0
+
+        for city in range(self.n):
+            edge_count += len(self.neighbors(city))
+
+        edge_count //= 2
+
+        print("\nGRAPH STATISTICS")
+        print("=" * 30)
+        print(f"Cities: {self.n}")
+        print(f"Highways: {edge_count}")
+        print(f"Maximum Colors Available: {len(COLORS)}")
+
     def load_edges(self, filename):
         # loads data from csv file with helper function to get a (source, dest, edge_weight) tuple
         for source, dest, value in read_csv_matrix(filename):
@@ -815,6 +829,9 @@ def main():
     graph = Graph(CITIES)
     graph.load_edges("CS362_Project_Data(edge_weights).csv")
     graph.load_heuristics("CS362_Project_Data(heuristics).csv")
+
+    #graph.print_graph_stats()
+
     run_part_a(graph)
     run_part_b(graph)
 
